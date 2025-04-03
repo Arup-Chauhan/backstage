@@ -48,8 +48,7 @@ import {
   removeDuplicateEntitiesFrom,
 } from '../../../../helpers/helpers';
 import { EntityRelationAggregation } from '../../types';
-import { useTranslationRef } from '@backstage/frontend-plugin-api';
-import { orgTranslationRef } from '../../../../translation';
+import TextField from '@material-ui/core/TextField';
 
 /** @public */
 export type MemberComponentClassKey = 'card' | 'avatar';
@@ -232,6 +231,8 @@ export const MembersListCard = (props: {
     ),
   ) as UserEntity[];
 
+  const [searchTerm, setSearchTerm] = useState('');
+
   if (loading) {
     return <Progress />;
   } else if (error) {
@@ -257,13 +258,22 @@ export const MembersListCard = (props: {
     />
   );
 
-  let memberList: JSX.Element;
+  const filteredMembers = members.filter(member =>
+    member.spec.profile?.displayName
+      ?.toLocaleLowerCase('en-US')
+      .includes(searchTerm.toLocaleLowerCase('en-US')),
+  );
+
+  let memberList: React.JSX.Element;
+
   if (members && members.length > 0) {
     memberList = (
       <Box className={classes.memberList}>
-        {members.slice(pageSize * (page - 1), pageSize * page).map(member => (
-          <MemberComponent member={member} key={stringifyEntityRef(member)} />
-        ))}
+        {filteredMembers
+          .slice(pageSize * (page - 1), pageSize * page)
+          .map(member => (
+            <MemberComponent member={member} key={stringifyEntityRef(member)} />
+          ))}
       </Box>
     );
   } else {
@@ -287,24 +297,31 @@ export const MembersListCard = (props: {
         className={classes.root}
         cardClassName={classes.cardContent}
       >
-        {showAggregateMembersToggle && (
-          <>
-            {t('membersListCard.aggregateMembersToggle.directMembers')}
-            <Switch
-              color="primary"
-              checked={showAggregateMembers}
-              onChange={() => {
-                setShowAggregateMembers(!showAggregateMembers);
-              }}
-              inputProps={{
-                'aria-label': t(
-                  'membersListCard.aggregateMembersToggle.ariaLabel',
-                ),
-              }}
-            />
-            {t('membersListCard.aggregateMembersToggle.aggregatedMembers')}
-          </>
-        )}
+        <Box>
+          {showAggregateMembersToggle && (
+            <Box justifySelf="end">
+              Direct Members
+              <Switch
+                color="primary"
+                checked={showAggregateMembers}
+                onChange={() => {
+                  setShowAggregateMembers(!showAggregateMembers);
+                }}
+                inputProps={{ 'aria-label': 'Users Type Switch' }}
+              />
+              Aggregated Members
+            </Box>
+          )}
+          <TextField
+            label="Search Members"
+            variant="outlined"
+            size="small"
+            fullWidth
+            margin="dense"
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </Box>
+
         {showAggregateMembers && loadingDescendantMembers ? (
           <Progress />
         ) : (
