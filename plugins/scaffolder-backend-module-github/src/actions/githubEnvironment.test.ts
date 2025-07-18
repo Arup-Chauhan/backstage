@@ -19,8 +19,12 @@ import { createMockActionContext } from '@backstage/plugin-scaffolder-node-test-
 import { TemplateAction } from '@backstage/plugin-scaffolder-node';
 import { ConfigReader } from '@backstage/config';
 import { ScmIntegrations } from '@backstage/integration';
-import { CatalogApi } from '@backstage/catalog-client';
-import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
+import { mockCredentials } from '@backstage/backend-test-utils';
+
+import { Octokit } from 'octokit';
+import { catalogServiceMock } from '@backstage/plugin-catalog-node/testUtils';
+
+const octokitMock = Octokit as unknown as jest.Mock;
 
 const mockOctokit = {
   rest: {
@@ -43,20 +47,8 @@ const mockOctokit = {
   },
 };
 
-const mockCatalogClient: Partial<CatalogApi> = {
-  getEntitiesByRefs: jest.fn(),
-};
-
 jest.mock('octokit', () => ({
-  Octokit: class {
-    constructor() {
-      return mockOctokit;
-    }
-  },
-}));
-
-jest.mock('@backstage/catalog-client', () => ({
-  CatalogClient: mockCatalogClient,
+  Octokit: jest.fn(),
 }));
 
 const publicKey = '2Sg8iYjAxxmI2LvUXpJjkYrMxURPc8r+dB7TJyvvcCU=';
@@ -72,25 +64,22 @@ describe('github:environment:create', () => {
   });
 
   const integrations = ScmIntegrations.fromConfig(config);
+  const mockCatalogService = catalogServiceMock.mock();
 
   const credentials = mockCredentials.user();
 
-  const token = mockCredentials.service.token({
-    onBehalfOf: credentials,
-    targetPluginId: 'catalog',
-  });
-
-  let action: TemplateAction<any>;
+  let action: TemplateAction<any, any, any>;
 
   const mockContext = createMockActionContext({
     input: {
       repoUrl: 'github.com?repo=repository&owner=owner',
       name: 'envname',
     },
-    secrets: { backstageToken: token },
   });
 
   beforeEach(() => {
+    octokitMock.mockImplementation(() => mockOctokit);
+
     mockOctokit.rest.actions.getEnvironmentPublicKey.mockResolvedValue({
       data: {
         key: publicKey,
@@ -112,15 +101,18 @@ describe('github:environment:create', () => {
         id: 2,
       },
     });
-    (mockCatalogClient.getEntitiesByRefs as jest.Mock).mockResolvedValue({
+
+    mockCatalogService.getEntitiesByRefs.mockResolvedValue({
       items: [
         {
+          apiVersion: '1',
           kind: 'User',
           metadata: {
             name: 'johndoe',
           },
         },
         {
+          apiVersion: '1',
           kind: 'Group',
           metadata: {
             name: 'team-a',
@@ -131,12 +123,19 @@ describe('github:environment:create', () => {
 
     action = createGithubEnvironmentAction({
       integrations,
-      catalogClient: mockCatalogClient as CatalogApi,
-      auth: mockServices.auth(),
+      catalog: mockCatalogService,
     });
   });
 
   afterEach(jest.resetAllMocks);
+
+  it('should pass context logger to Octokit client', async () => {
+    await action.handler(mockContext);
+
+    expect(octokitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ log: mockContext.logger }),
+    );
+  });
 
   it('should work happy path', async () => {
     await action.handler(mockContext);
@@ -147,10 +146,10 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      reviewers: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
     });
   });
 
@@ -176,9 +175,9 @@ describe('github:environment:create', () => {
         protected_branches: true,
         custom_branch_policies: false,
       },
-      reviewers: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      reviewers: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
     });
   });
 
@@ -205,9 +204,9 @@ describe('github:environment:create', () => {
         protected_branches: false,
         custom_branch_policies: true,
       },
-      reviewers: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      reviewers: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
     });
 
     expect(
@@ -253,9 +252,9 @@ describe('github:environment:create', () => {
         protected_branches: false,
         custom_branch_policies: true,
       },
-      reviewers: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      reviewers: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
     });
 
     expect(
@@ -296,10 +295,10 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      reviewers: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
     });
 
     expect(
@@ -345,10 +344,10 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      reviewers: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
     });
 
     expect(
@@ -404,10 +403,32 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      reviewers: null,
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
       wait_timer: 1000,
-      prevent_self_review: false,
+      prevent_self_review: undefined,
+    });
+  });
+
+  it('should work with wait_timer 0', async () => {
+    await action.handler({
+      ...mockContext,
+      input: {
+        ...mockContext.input,
+        waitTimer: 0,
+      },
+    });
+
+    expect(
+      mockOctokit.rest.repos.createOrUpdateEnvironment,
+    ).toHaveBeenCalledWith({
+      owner: 'owner',
+      repo: 'repository',
+      environment_name: 'envname',
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
+      wait_timer: 0,
+      prevent_self_review: undefined,
     });
   });
 
@@ -426,9 +447,9 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      reviewers: null,
-      wait_timer: 0,
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
+      wait_timer: undefined,
       prevent_self_review: true,
     });
   });
@@ -448,9 +469,9 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      reviewers: null,
-      wait_timer: 0,
+      deployment_branch_policy: undefined,
+      reviewers: undefined,
+      wait_timer: undefined,
       prevent_self_review: false,
     });
   });
@@ -464,11 +485,11 @@ describe('github:environment:create', () => {
       },
     });
 
-    expect(mockCatalogClient.getEntitiesByRefs).toHaveBeenCalledWith(
+    expect(mockCatalogService.getEntitiesByRefs).toHaveBeenCalledWith(
       {
         entityRefs: ['group:default/team-a', 'user:default/johndoe'],
       },
-      { token },
+      { credentials },
     );
 
     expect(
@@ -477,9 +498,9 @@ describe('github:environment:create', () => {
       owner: 'owner',
       repo: 'repository',
       environment_name: 'envname',
-      deployment_branch_policy: null,
-      wait_timer: 0,
-      prevent_self_review: false,
+      deployment_branch_policy: undefined,
+      wait_timer: undefined,
+      prevent_self_review: undefined,
       reviewers: [
         {
           id: 1,

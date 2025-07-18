@@ -79,6 +79,8 @@ export const coreComponentsTranslationRef = createTranslationRef({
       authRedirectTitle: 'This will trigger a http redirect to OAuth Login.',
       login: 'Log in',
       rejectAll: 'Reject All',
+      message:
+        'Sign-in to allow {{appTitle}} access to {{provider}} APIs and identities.',
     },
     supportButton: {
       title: 'Support',
@@ -88,11 +90,29 @@ export const coreComponentsTranslationRef = createTranslationRef({
       filter: {
         title: 'Filters',
         clearAll: 'Clear all',
+        placeholder: 'All results',
+      },
+      body: {
+        emptyDataSourceMessage: 'No records to display',
+      },
+      pagination: {
+        firstTooltip: 'First Page',
+        labelDisplayedRows: '{from}-{to} of {count}',
+        labelRowsSelect: 'rows',
+        lastTooltip: 'Last Page',
+        nextTooltip: 'Next Page',
+        previousTooltip: 'Previous Page',
+      },
+      toolbar: {
+        search: 'Filter',
+      },
+      header: {
+        actions: 'Actions',
       },
     },
     alertDisplay: {
-      message_one: '({{ count }} older message)',
-      message_other: '({{ count }} older messages)',
+      message_one: '({{ count }} newer message)',
+      message_other: '({{ count }} newer messages)',
     },
     autoLogout: {
       stillTherePrompt: {

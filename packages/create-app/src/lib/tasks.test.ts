@@ -101,6 +101,7 @@ jest.mock('./versions', () => ({
     '@backstage/plugin-user-settings': '1.0.0',
     '@backstage/theme': '1.0.0',
     '@backstage/test-utils': '1.0.0',
+    '@backstage/ui': '1.0.0',
   },
 }));
 

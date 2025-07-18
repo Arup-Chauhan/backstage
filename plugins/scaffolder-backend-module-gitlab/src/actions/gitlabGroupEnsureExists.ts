@@ -17,8 +17,6 @@
 import { ScmIntegrationRegistry } from '@backstage/integration';
 import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
 import { GroupSchema } from '@gitbeaker/rest';
-import { z } from 'zod';
-import commonGitlabConfig from '../commonGitlabConfig';
 import { getClient, parseRepoUrl } from '../util';
 import { examples } from './gitlabGroupEnsureExists.examples';
 
@@ -38,9 +36,19 @@ export const createGitlabGroupEnsureExistsAction = (options: {
     supportsDryRun: true,
     examples,
     schema: {
-      input: commonGitlabConfig.merge(
-        z.object({
-          path: z
+      input: {
+        repoUrl: z =>
+          z.string({
+            description: `Accepts the format 'gitlab.com?repo=project_name&owner=group_name' where 'project_name' is the repository name and 'group_name' is a group or username`,
+          }),
+        token: z =>
+          z
+            .string({
+              description: 'The token to use for authorization to GitLab',
+            })
+            .optional(),
+        path: z =>
+          z
             .array(
               z.string().or(
                 z.object({
@@ -54,13 +62,15 @@ export const createGitlabGroupEnsureExistsAction = (options: {
               },
             )
             .min(1),
-        }),
-      ),
-      output: z.object({
-        groupId: z
-          .number({ description: 'The id of the innermost sub-group' })
-          .optional(),
-      }),
+      },
+      output: {
+        groupId: z =>
+          z
+            .number({
+              description: 'The id of the innermost sub-group',
+            })
+            .optional(),
+      },
     },
     async handler(ctx) {
       if (ctx.isDryRun) {
@@ -76,11 +86,7 @@ export const createGitlabGroupEnsureExistsAction = (options: {
 
       let currentPath: string | null = null;
       let parentId: number | null = null;
-      for (const pathElement of path) {
-        const slug =
-          typeof pathElement === 'string' ? pathElement : pathElement.slug;
-        const name =
-          typeof pathElement === 'string' ? pathElement : pathElement.name;
+      for (const { name, slug } of pathIterator(path)) {
         const fullPath: string = currentPath ? `${currentPath}/${slug}` : slug;
         const result = (await api.Groups.search(
           fullPath,
@@ -90,17 +96,24 @@ export const createGitlabGroupEnsureExistsAction = (options: {
         );
         if (!subGroup) {
           ctx.logger.info(`creating missing group ${fullPath}`);
-          parentId = (
-            await api.Groups.create(
-              name,
-              slug,
-              parentId
-                ? {
-                    parentId: parentId,
-                  }
-                : {},
-            )
-          )?.id;
+
+          parentId = await ctx.checkpoint({
+            key: `ensure.${name}.${slug}.${parentId}`,
+            // eslint-disable-next-line no-loop-func
+            fn: async () => {
+              return (
+                await api.Groups.create(
+                  name,
+                  slug,
+                  parentId
+                    ? {
+                        parentId: parentId,
+                      }
+                    : {},
+                )
+              )?.id;
+            },
+          });
         } else {
           parentId = subGroup.id;
         }
@@ -112,3 +125,19 @@ export const createGitlabGroupEnsureExistsAction = (options: {
     },
   });
 };
+
+type PathPart = { name: string; slug: string };
+type PathItem = string | PathPart;
+
+function* pathIterator(items: PathItem[]): Generator<PathPart> {
+  for (const item of items) {
+    if (typeof item === 'string') {
+      const parts = item.split('/');
+      for (const part of parts) {
+        yield { name: part, slug: part };
+      }
+    } else {
+      yield item;
+    }
+  }
+}

@@ -15,11 +15,10 @@
  */
 
 import { OngoingTask } from './OngoingTask';
-import React from 'react';
 import {
+  mockApis,
   renderInTestApp,
   TestApiProvider,
-  mockApis,
 } from '@backstage/test-utils';
 import { scaffolderApiRef } from '@backstage/plugin-scaffolder-react';
 import { act, fireEvent, waitFor, within } from '@testing-library/react';
@@ -30,6 +29,7 @@ import {
 import { rootRouteRef } from '../../routes';
 import { AuthorizeResult } from '@backstage/plugin-permission-common';
 import { SWRConfig } from 'swr';
+import { entityPresentationApiRef } from '@backstage/plugin-catalog-react';
 
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
@@ -47,7 +47,10 @@ jest.mock('@backstage/plugin-scaffolder-react', () => ({
     task: {
       spec: {
         steps: [],
-        templateInfo: { entity: { metadata: { name: 'my-template' } } },
+        templateInfo: {
+          entityRef: 'template:default/my-template',
+          entity: { metadata: { name: 'my-template' } },
+        },
       },
     },
   }),
@@ -57,6 +60,12 @@ describe('OngoingTask', () => {
   const mockScaffolderApi = {
     cancelTask: jest.fn(),
     getTask: jest.fn().mockImplementation(async () => {}),
+  };
+
+  const mockEntityPresentationApi = {
+    forEntity: jest.fn().mockReturnValue({
+      promise: new Promise(resolve => resolve({ primaryTitle: 'My template' })),
+    }),
   };
 
   beforeEach(async () => {
@@ -71,6 +80,7 @@ describe('OngoingTask', () => {
           apis={[
             [scaffolderApiRef, mockScaffolderApi],
             [permissionApiRef, permissionApi || mockApis.permission()],
+            [entityPresentationApiRef, mockEntityPresentationApi],
           ]}
         >
           <OngoingTask />
@@ -79,6 +89,12 @@ describe('OngoingTask', () => {
       { mountedRoutes: { '/': rootRouteRef } },
     );
   };
+
+  it('should render title', async () => {
+    const rendered = await render();
+    expect(rendered.getByText('My template')).toBeInTheDocument();
+  });
+
   it('should trigger cancel api on "Cancel" click in context menu', async () => {
     const rendered = await render();
     const cancelOptionLabel = 'Cancel';
@@ -145,20 +161,43 @@ describe('OngoingTask', () => {
     await expect(rendered.findByText('Hide Logs')).resolves.toBeInTheDocument();
   });
 
-  it('should have cancel and start over buttons be disabled without the proper permissions', async () => {
+  it('should have cancel button be disabled when user has read permission but lacks cancel permission', async () => {
     const permissionApi = mockApis.permission({
-      authorize: AuthorizeResult.DENY,
+      authorize: request => {
+        if (request.permission.name === 'scaffolder.task.cancel') {
+          return AuthorizeResult.DENY;
+        }
+        return AuthorizeResult.ALLOW;
+      },
     });
     const rendered = await render(permissionApi);
 
     const { getByTestId } = rendered;
     expect(getByTestId('cancel-button')).toHaveClass('Mui-disabled');
-    expect(getByTestId('start-over-button')).toHaveClass('Mui-disabled');
 
     await act(async () => {
       fireEvent.click(getByTestId('menu-button'));
     });
     expect(getByTestId('cancel-task')).toHaveClass('Mui-disabled');
-    expect(getByTestId('start-over-task')).toHaveClass('Mui-disabled');
+  });
+
+  it('should have start over button be disabled when user has read permission but lacks create permission', async () => {
+    const permissionApi = mockApis.permission({
+      authorize: request => {
+        if (request.permission.name === 'scaffolder.task.create') {
+          return AuthorizeResult.DENY;
+        }
+        return AuthorizeResult.ALLOW;
+      },
+    });
+    const rendered = await render(permissionApi);
+
+    const { getByTestId } = rendered;
+    expect(getByTestId('start-over-button')).toHaveClass('Mui-disabled');
+
+    await act(async () => {
+      fireEvent.click(getByTestId('menu-button'));
+    });
+    expect(getByTestId('start-over-button')).toHaveClass('Mui-disabled');
   });
 });

@@ -5,7 +5,6 @@
 ```ts
 import { BackendFeature } from '@backstage/backend-plugin-api';
 import { Config } from '@backstage/config';
-import { JsonObject } from '@backstage/types';
 import { TemplateAction } from '@backstage/plugin-scaffolder-node';
 
 // @public
@@ -17,9 +16,13 @@ export function createSentryCreateProjectAction(options: {
     teamSlug: string;
     name: string;
     slug?: string | undefined;
+    platform?: string | undefined;
     authToken?: string | undefined;
   },
-  JsonObject
+  {
+    [x: string]: any;
+  },
+  'v2'
 >;
 
 // @public

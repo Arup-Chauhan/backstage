@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import React from 'react';
 import {
   createExtension,
   coreExtensionData,
@@ -43,7 +42,9 @@ export const AppRoutes = createExtension({
 
       const element = useRoutes([
         ...inputs.routes.map(route => ({
-          path: `${route.get(coreExtensionData.routePath)}/*`,
+          path: `${route
+            .get(coreExtensionData.routePath)
+            .replace(/\/$/, '')}/*`,
           element: route.get(coreExtensionData.reactElement),
         })),
         {

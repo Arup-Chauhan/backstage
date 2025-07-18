@@ -8,14 +8,32 @@ import { ConfigurableExtensionDataRef } from '@backstage/frontend-plugin-api';
 import { ExtensionDefinition } from '@backstage/frontend-plugin-api';
 import { ExtensionInput } from '@backstage/frontend-plugin-api';
 import { FrontendPlugin } from '@backstage/frontend-plugin-api';
-import { default as React_2 } from 'react';
+import { JSX as JSX_2 } from 'react';
 import { RouteRef } from '@backstage/frontend-plugin-api';
+import { TranslationRef } from '@backstage/frontend-plugin-api';
 
 // @alpha (undocumented)
 const _default: FrontendPlugin<
-  {},
+  {
+    root: RouteRef<undefined>;
+  },
   {},
   {
+    'app-root-element:home/visit-listener': ExtensionDefinition<{
+      kind: 'app-root-element';
+      name: 'visit-listener';
+      config: {};
+      configInput: {};
+      output: ConfigurableExtensionDataRef<
+        JSX_2.Element,
+        'core.reactElement',
+        {}
+      >;
+      inputs: {};
+      params: {
+        element: JSX.Element | (() => JSX.Element);
+      };
+    }>;
     'page:home': ExtensionDefinition<{
       config: {
         path: string | undefined;
@@ -24,11 +42,7 @@ const _default: FrontendPlugin<
         path?: string | undefined;
       };
       output:
-        | ConfigurableExtensionDataRef<
-            React_2.JSX.Element,
-            'core.reactElement',
-            {}
-          >
+        | ConfigurableExtensionDataRef<JSX_2.Element, 'core.reactElement', {}>
         | ConfigurableExtensionDataRef<string, 'core.routing.path', {}>
         | ConfigurableExtensionDataRef<
             RouteRef<AnyRouteRefParams>,
@@ -40,7 +54,7 @@ const _default: FrontendPlugin<
       inputs: {
         props: ExtensionInput<
           | ConfigurableExtensionDataRef<
-              React_2.JSX.Element,
+              JSX_2.Element,
               'core.reactElement',
               {
                 optional: true;
@@ -64,12 +78,44 @@ const _default: FrontendPlugin<
       params: {
         defaultPath: string;
         loader: () => Promise<JSX.Element>;
-        routeRef?: RouteRef<AnyRouteRefParams> | undefined;
+        routeRef?: RouteRef;
       };
     }>;
   }
 >;
 export default _default;
+
+// @alpha (undocumented)
+export const homeTranslationRef: TranslationRef<
+  'home',
+  {
+    readonly 'starredEntities.noStarredEntitiesMessage': 'Click the star beside an entity name to add it to this list!';
+    readonly 'addWidgetDialog.title': 'Add new widget to dashboard';
+    readonly 'customHomepageButtons.clearAll': 'Clear all';
+    readonly 'customHomepageButtons.edit': 'Edit';
+    readonly 'customHomepageButtons.restoreDefaults': 'Restore defaults';
+    readonly 'customHomepageButtons.addWidget': 'Add widget';
+    readonly 'customHomepageButtons.save': 'Save';
+    readonly 'customHomepage.noWidgets': "No widgets added. Start by clicking the 'Add widget' button.";
+    readonly 'widgetSettingsOverlay.cancelButtonTitle': 'Cancel';
+    readonly 'widgetSettingsOverlay.editSettingsTooptip': 'Edit settings';
+    readonly 'widgetSettingsOverlay.deleteWidgetTooltip': 'Delete widget';
+    readonly 'widgetSettingsOverlay.submitButtonTitle': 'Submit';
+    readonly 'starredEntityListItem.removeFavoriteEntityTitle': 'Remove entity from favorites';
+    readonly 'visitList.empty.title': 'There are no visits to show yet.';
+    readonly 'visitList.empty.description': 'Once you start using Backstage, your visits will appear here as a quick link to carry on where you left off.';
+    readonly 'visitList.few.title': 'The more pages you visit, the more pages will appear here.';
+    readonly 'quickStart.title': 'Onboarding';
+    readonly 'quickStart.description': 'Get started with Backstage';
+    readonly 'quickStart.learnMoreLinkTitle': 'Learn more';
+    readonly 'visitedByType.action.viewMore': 'View more';
+    readonly 'visitedByType.action.viewLess': 'View less';
+    readonly 'featuredDocsCard.empty.title': 'No documents to show';
+    readonly 'featuredDocsCard.empty.description': 'Create your own document. Check out our Getting Started Information';
+    readonly 'featuredDocsCard.empty.learnMoreLinkTitle': 'DOCS';
+    readonly 'featuredDocsCard.learnMoreTitle': 'LEARN MORE';
+  }
+>;
 
 // @alpha (undocumented)
 export const titleExtensionDataRef: ConfigurableExtensionDataRef<

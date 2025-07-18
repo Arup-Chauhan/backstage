@@ -15,23 +15,17 @@
  */
 
 import {
-  createLegacyAuthAdapters,
-  HostDiscovery,
-} from '@backstage/backend-common';
-import {
   AuditorService,
   AuthService,
   BackstageCredentials,
   DatabaseService,
-  DiscoveryService,
   HttpAuthService,
   LifecycleService,
+  LoggerService,
   PermissionsService,
   resolveSafeChildPath,
   SchedulerService,
-  UrlReaderService,
 } from '@backstage/backend-plugin-api';
-import { CatalogApi } from '@backstage/catalog-client';
 import {
   CompoundEntityRef,
   Entity,
@@ -40,30 +34,28 @@ import {
   UserEntity,
 } from '@backstage/catalog-model';
 import { Config, readDurationFromConfig } from '@backstage/config';
-import { InputError, NotFoundError, stringifyError } from '@backstage/errors';
+import { InputError, NotFoundError } from '@backstage/errors';
 import { ScmIntegrations } from '@backstage/integration';
-import {
-  IdentityApi,
-  IdentityApiGetIdentityRequest,
-} from '@backstage/plugin-auth-node';
+
 import { EventsService } from '@backstage/plugin-events-node';
-import { PermissionRuleParams } from '@backstage/plugin-permission-common';
+
 import {
   createConditionAuthorizer,
   createPermissionIntegrationRouter,
-  PermissionRule,
+  createConditionTransformer,
+  ConditionTransformer,
 } from '@backstage/plugin-permission-node';
 import {
   TaskSpec,
-  TemplateEntityStepV1beta3,
   TemplateEntityV1beta3,
   templateEntityV1beta3Validator,
-  TemplateParametersV1beta3,
 } from '@backstage/plugin-scaffolder-common';
 import {
   RESOURCE_TYPE_SCAFFOLDER_ACTION,
   RESOURCE_TYPE_SCAFFOLDER_TEMPLATE,
+  RESOURCE_TYPE_SCAFFOLDER_TASK,
   scaffolderActionPermissions,
+  scaffolderTaskPermissions,
   scaffolderPermissions,
   scaffolderTemplatePermissions,
   taskCancelPermission,
@@ -81,19 +73,19 @@ import {
 } from '@backstage/plugin-scaffolder-node';
 import {
   AutocompleteHandler,
+  CreatedTemplateFilter,
+  CreatedTemplateGlobal,
   WorkspaceProvider,
 } from '@backstage/plugin-scaffolder-node/alpha';
-import { HumanDuration, JsonObject, JsonValue } from '@backstage/types';
+import { HumanDuration, JsonObject } from '@backstage/types';
 import express from 'express';
 import Router from 'express-promise-router';
 import { validate } from 'jsonschema';
 import { Duration } from 'luxon';
 import { pathToFileURL } from 'url';
 import { v4 as uuid } from 'uuid';
-import { Logger } from 'winston';
 import { z } from 'zod';
 import {
-  createBuiltinActions,
   DatabaseTaskStore,
   TaskWorker,
   TemplateActionRegistry,
@@ -101,7 +93,11 @@ import {
 import { createDryRunner } from '../scaffolder/dryrun';
 import { StorageTaskBroker } from '../scaffolder/tasks/StorageTaskBroker';
 import { InternalTaskSecrets } from '../scaffolder/tasks/types';
-import { checkPermission } from '../util/checkPermissions';
+import {
+  checkPermission,
+  checkTaskPermission,
+  getAuthorizeConditions,
+} from '../util/checkPermissions';
 import {
   findTemplate,
   getEntityBaseUrl,
@@ -109,81 +105,62 @@ import {
   parseNumberParam,
   parseStringsParam,
 } from './helpers';
-import { scaffolderActionRules, scaffolderTemplateRules } from './rules';
 
-/**
- *
- * @public
- */
-export type TemplatePermissionRuleInput<
-  TParams extends PermissionRuleParams = PermissionRuleParams,
-> = PermissionRule<
-  TemplateEntityStepV1beta3 | TemplateParametersV1beta3,
-  {},
-  typeof RESOURCE_TYPE_SCAFFOLDER_TEMPLATE,
-  TParams
->;
-function isTemplatePermissionRuleInput(
-  permissionRule: TemplatePermissionRuleInput | ActionPermissionRuleInput,
-): permissionRule is TemplatePermissionRuleInput {
-  return permissionRule.resourceType === RESOURCE_TYPE_SCAFFOLDER_TEMPLATE;
-}
+import {
+  convertFiltersToRecord,
+  convertGlobalsToRecord,
+  extractFilterMetadata,
+  extractGlobalFunctionMetadata,
+  extractGlobalValueMetadata,
+} from '../util/templating';
+import { createDefaultFilters } from '../lib/templating/filters/createDefaultFilters';
+import {
+  ScaffolderPermissionRuleInput,
+  TaskPermissionRuleInput,
+  isTaskPermissionRuleInput,
+  ActionPermissionRuleInput,
+  isActionPermissionRuleInput,
+  isTemplatePermissionRuleInput,
+  TemplatePermissionRuleInput,
+} from './permissions';
+import { CatalogService } from '@backstage/plugin-catalog-node';
 
-/**
- *
- * @public
- */
-export type ActionPermissionRuleInput<
-  TParams extends PermissionRuleParams = PermissionRuleParams,
-> = PermissionRule<
-  TemplateEntityStepV1beta3 | TemplateParametersV1beta3,
-  {},
-  typeof RESOURCE_TYPE_SCAFFOLDER_ACTION,
-  TParams
->;
-function isActionPermissionRuleInput(
-  permissionRule: TemplatePermissionRuleInput | ActionPermissionRuleInput,
-): permissionRule is ActionPermissionRuleInput {
-  return permissionRule.resourceType === RESOURCE_TYPE_SCAFFOLDER_ACTION;
-}
+import {
+  scaffolderActionRules,
+  scaffolderTemplateRules,
+  scaffolderTaskRules,
+} from './rules';
+
+import { TaskFilters } from '@backstage/plugin-scaffolder-node';
 
 /**
  * RouterOptions
- *
- * @public
- * @deprecated Please migrate to the new backend system as this will be removed in the future.
  */
 export interface RouterOptions {
-  logger: Logger;
+  logger: LoggerService;
   config: Config;
-  reader: UrlReaderService;
   lifecycle?: LifecycleService;
   database: DatabaseService;
-  catalogClient: CatalogApi;
+  catalog: CatalogService;
   scheduler?: SchedulerService;
-  actions?: TemplateAction<any, any>[];
-  /**
-   * @deprecated taskWorkers is deprecated in favor of concurrentTasksLimit option with a single TaskWorker
-   * @defaultValue 1
-   */
-  taskWorkers?: number;
+  actions?: TemplateAction<any, any, any>[];
   /**
    * Sets the number of concurrent tasks that can be run at any given time on the TaskWorker
    * @defaultValue 10
    */
   concurrentTasksLimit?: number;
   taskBroker?: TaskBroker;
-  additionalTemplateFilters?: Record<string, TemplateFilter>;
-  additionalTemplateGlobals?: Record<string, TemplateGlobal>;
+  additionalTemplateFilters?:
+    | Record<string, TemplateFilter>
+    | CreatedTemplateFilter<any, any>[];
+  additionalTemplateGlobals?:
+    | Record<string, TemplateGlobal>
+    | CreatedTemplateGlobal[];
   additionalWorkspaceProviders?: Record<string, WorkspaceProvider>;
   permissions?: PermissionsService;
-  permissionRules?: Array<
-    TemplatePermissionRuleInput | ActionPermissionRuleInput
-  >;
-  auth?: AuthService;
-  httpAuth?: HttpAuthService;
-  identity?: IdentityApi;
-  discovery?: DiscoveryService;
+  permissionRules?: Array<ScaffolderPermissionRuleInput>;
+  auth: AuthService;
+  httpAuth: HttpAuthService;
   events?: EventsService;
   auditor?: AuditorService;
   autocompleteHandlers?: Record<string, AutocompleteHandler>;
@@ -191,70 +168,6 @@ export interface RouterOptions {
 
 function isSupportedTemplate(entity: TemplateEntityV1beta3) {
   return entity.apiVersion === 'scaffolder.backstage.io/v1beta3';
-}
-
-/*
- * @deprecated This function remains as the DefaultIdentityClient behaves slightly differently to the pre-existing
- * scaffolder behaviour. Specifically if the token fails to parse, the DefaultIdentityClient will raise an error.
- * The scaffolder did not raise an error in this case. As such we chose to allow it to behave as it did previously
- * until someone explicitly passes an IdentityApi. When we have reasonable confidence that most backstage deployments
- * are using the IdentityApi, we can remove this function.
- */
-function buildDefaultIdentityClient(options: RouterOptions): IdentityApi {
-  return {
-    getIdentity: async ({ request }: IdentityApiGetIdentityRequest) => {
-      const header = request.headers.authorization;
-      const { logger } = options;
-
-      if (!header) {
-        return undefined;
-      }
-
-      try {
-        const token = header.match(/^Bearer\s(\S+\.\S+\.\S+)$/i)?.[1];
-        if (!token) {
-          throw new TypeError('Expected Bearer with JWT');
-        }
-
-        const [_header, rawPayload, _signature] = token.split('.');
-        const payload: JsonValue = JSON.parse(
-          Buffer.from(rawPayload, 'base64').toString(),
-        );
-
-        if (
-          typeof payload !== 'object' ||
-          payload === null ||
-          Array.isArray(payload)
-        ) {
-          throw new TypeError('Malformed JWT payload');
-        }
-
-        const sub = payload.sub;
-        if (typeof sub !== 'string') {
-          throw new TypeError('Expected string sub claim');
-        }
-
-        if (sub === 'backstage-server') {
-          return undefined;
-        }
-
-        // Check that it's a valid ref, otherwise this will throw.
-        parseEntityRef(sub);
-
-        return {
-          identity: {
-            userEntityRef: sub,
-            ownershipEntityRefs: [],
-            type: 'user',
-          },
-          token,
-        };
-      } catch (e) {
-        logger.error(`Invalid authorization header: ${stringifyError(e)}`);
-        return undefined;
-      }
-    },
-  };
 }
 
 const readDuration = (
@@ -270,8 +183,6 @@ const readDuration = (
 
 /**
  * A method to create a router for the scaffolder backend plugin.
- * @public
- * @deprecated Please migrate to the new backend system as this will be removed in the future.
  */
 export async function createRouter(
   options: RouterOptions,
@@ -283,29 +194,21 @@ export async function createRouter(
   const {
     logger: parentLogger,
     config,
-    reader,
     database,
-    catalogClient,
+    catalog,
     actions,
-    taskWorkers,
     scheduler,
     additionalTemplateFilters,
     additionalTemplateGlobals,
     additionalWorkspaceProviders,
     permissions,
     permissionRules,
-    discovery = HostDiscovery.fromConfig(config),
-    identity = buildDefaultIdentityClient(options),
     autocompleteHandlers = {},
     events: eventsService,
+    auth,
+    httpAuth,
     auditor,
   } = options;
-
-  const { auth, httpAuth } = createLegacyAuthAdapters({
-    ...options,
-    identity,
-    discovery,
-  });
 
   const concurrentTasksLimit =
     options.concurrentTasksLimit ??
@@ -364,43 +267,38 @@ export async function createRouter(
 
   const actionRegistry = new TemplateActionRegistry();
 
+  const templateExtensions = {
+    additionalTemplateFilters: convertFiltersToRecord(
+      additionalTemplateFilters,
+    ),
+    additionalTemplateGlobals: convertGlobalsToRecord(
+      additionalTemplateGlobals,
+    ),
+  };
+
   const workers: TaskWorker[] = [];
   if (concurrentTasksLimit !== 0) {
     const gracefulShutdown = config.getOptionalBoolean(
       'scaffolder.EXPERIMENTAL_gracefulShutdown',
     );
 
-    for (let i = 0; i < (taskWorkers || 1); i++) {
-      const worker = await TaskWorker.create({
-        taskBroker,
-        actionRegistry,
-        integrations,
-        logger,
-        auditor,
-        workingDirectory,
-        additionalTemplateFilters,
-        additionalTemplateGlobals,
-        concurrentTasksLimit,
-        permissions,
-        gracefulShutdown,
-      });
-      workers.push(worker);
-    }
+    const worker = await TaskWorker.create({
+      taskBroker,
+      actionRegistry,
+      integrations,
+      logger,
+      auditor,
+      workingDirectory,
+      concurrentTasksLimit,
+      permissions,
+      gracefulShutdown,
+      ...templateExtensions,
+    });
+
+    workers.push(worker);
   }
 
-  const actionsToRegister = Array.isArray(actions)
-    ? actions
-    : createBuiltinActions({
-        integrations,
-        catalogClient,
-        reader,
-        config,
-        additionalTemplateFilters,
-        additionalTemplateGlobals,
-        auth,
-      });
-
-  actionsToRegister.forEach(action => actionRegistry.register(action));
+  actions?.forEach(action => actionRegistry.register(action));
 
   const launchWorkers = () => workers.forEach(worker => worker.start());
 
@@ -421,9 +319,8 @@ export async function createRouter(
     logger,
     auditor,
     workingDirectory,
-    additionalTemplateFilters,
-    additionalTemplateGlobals,
     permissions,
+    ...templateExtensions,
   });
 
   const templateRules: TemplatePermissionRuleInput[] = Object.values(
@@ -432,15 +329,24 @@ export async function createRouter(
   const actionRules: ActionPermissionRuleInput[] = Object.values(
     scaffolderActionRules,
   );
+  const taskRules: TaskPermissionRuleInput[] =
+    Object.values(scaffolderTaskRules);
 
   if (permissionRules) {
     templateRules.push(
       ...permissionRules.filter(isTemplatePermissionRuleInput),
     );
     actionRules.push(...permissionRules.filter(isActionPermissionRuleInput));
+    taskRules.push(...permissionRules.filter(isTaskPermissionRuleInput));
   }
 
-  const isAuthorized = createConditionAuthorizer(Object.values(templateRules));
+  const isTemplateAuthorized = createConditionAuthorizer(
+    Object.values(templateRules),
+  );
+  const isTaskAuthorized = createConditionAuthorizer(Object.values(taskRules));
+
+  const taskTransformConditions: ConditionTransformer<TaskFilters> =
+    createConditionTransformer(Object.values(taskRules));
 
   const permissionIntegrationRouter = createPermissionIntegrationRouter({
     resources: [
@@ -453,6 +359,11 @@ export async function createRouter(
         resourceType: RESOURCE_TYPE_SCAFFOLDER_ACTION,
         permissions: scaffolderActionPermissions,
         rules: actionRules,
+      },
+      {
+        resourceType: RESOURCE_TYPE_SCAFFOLDER_TASK,
+        permissions: scaffolderTaskPermissions,
+        rules: taskRules,
       },
     ],
     permissions: scaffolderPermissions,
@@ -475,16 +386,7 @@ export async function createRouter(
         try {
           const credentials = await httpAuth.credentials(req);
 
-          const { token } = await auth.getPluginRequestToken({
-            onBehalfOf: credentials,
-            targetPluginId: 'catalog',
-          });
-
-          const template = await authorizeTemplate(
-            req.params,
-            token,
-            credentials,
-          );
+          const template = await authorizeTemplate(req.params, credentials);
 
           const parameters = [template.spec.parameters ?? []].flat();
 
@@ -563,17 +465,12 @@ export async function createRouter(
           permissionService: permissions,
         });
 
-        const { token } = await auth.getPluginRequestToken({
-          onBehalfOf: credentials,
-          targetPluginId: 'catalog',
-        });
-
         const userEntityRef = auth.isPrincipal(credentials, 'user')
           ? credentials.principal.userEntityRef
           : undefined;
 
         const userEntity = userEntityRef
-          ? await catalogClient.getEntityByRef(userEntityRef, { token })
+          ? await catalog.getEntityByRef(userEntityRef, { credentials })
           : undefined;
 
         let auditLog = `Scaffolding task for ${templateRef}`;
@@ -586,7 +483,6 @@ export async function createRouter(
 
         const template = await authorizeTemplate(
           { kind, namespace, name },
-          token,
           credentials,
         );
 
@@ -634,7 +530,7 @@ export async function createRouter(
 
         const secrets: InternalTaskSecrets = {
           ...req.body.secrets,
-          backstageToken: token,
+          backstageToken: (credentials as any).token,
           __initiatorCredentials: JSON.stringify({
             ...credentials,
             // credentials.token is nonenumerable and will not be serialized, so we need to add it explicitly
@@ -667,11 +563,6 @@ export async function createRouter(
 
       try {
         const credentials = await httpAuth.credentials(req);
-        await checkPermission({
-          credentials,
-          permissions: [taskReadPermission],
-          permissionService: permissions,
-        });
 
         if (!taskBroker.list) {
           throw new Error(
@@ -699,6 +590,13 @@ export async function createRouter(
         const limit = parseNumberParam(req.query.limit, 'limit');
         const offset = parseNumberParam(req.query.offset, 'offset');
 
+        const taskPermissionFilters = await getAuthorizeConditions({
+          credentials: credentials,
+          permission: taskReadPermission,
+          permissionService: permissions,
+          transformConditions: taskTransformConditions,
+        });
+
         const tasks = await taskBroker.list({
           filters: {
             createdBy,
@@ -709,6 +607,7 @@ export async function createRouter(
             limit: limit ? limit[0] : undefined,
             offset: offset ? offset[0] : undefined,
           },
+          permissionFilters: taskPermissionFilters,
         });
 
         await auditorEvent?.success();
@@ -733,13 +632,17 @@ export async function createRouter(
 
       try {
         const credentials = await httpAuth.credentials(req);
-        await checkPermission({
+
+        const task = await taskBroker.get(taskId);
+
+        await checkTaskPermission({
           credentials,
           permissions: [taskReadPermission],
           permissionService: permissions,
+          task: task,
+          isTaskAuthorized,
         });
 
-        const task = await taskBroker.get(taskId);
         if (!task) {
           throw new NotFoundError(`Task with id ${taskId} does not exist`);
         }
@@ -769,11 +672,14 @@ export async function createRouter(
 
       try {
         const credentials = await httpAuth.credentials(req);
+        const task = await taskBroker.get(taskId);
         // Requires both read and cancel permissions
-        await checkPermission({
+        await checkTaskPermission({
           credentials,
           permissions: [taskCancelPermission, taskReadPermission],
           permissionService: permissions,
+          task: task,
+          isTaskAuthorized,
         });
 
         await taskBroker.cancel?.(taskId);
@@ -801,16 +707,41 @@ export async function createRouter(
 
       try {
         const credentials = await httpAuth.credentials(req);
-        // Requires both read and cancel permissions
+        const task = await taskBroker.get(taskId);
+
+        // Requires both read and create permissions
         await checkPermission({
           credentials,
-          permissions: [taskCreatePermission, taskReadPermission],
+          permissions: [taskCreatePermission],
           permissionService: permissions,
+        });
+
+        await checkTaskPermission({
+          credentials,
+          permissions: [taskReadPermission],
+          permissionService: permissions,
+          task: task,
+          isTaskAuthorized,
         });
 
         await auditorEvent?.success();
 
-        await taskBroker.retry?.(taskId);
+        const { token } = await auth.getPluginRequestToken({
+          onBehalfOf: credentials,
+          targetPluginId: 'catalog',
+        });
+
+        const secrets: InternalTaskSecrets = {
+          ...req.body.secrets,
+          backstageToken: token,
+          __initiatorCredentials: JSON.stringify({
+            ...credentials,
+            // credentials.token is nonenumerable and will not be serialized, so we need to add it explicitly
+            token: (credentials as any).token,
+          }),
+        };
+
+        await taskBroker.retry?.({ secrets, taskId });
         res.status(201).json({ id: taskId });
       } catch (err) {
         await auditorEvent?.fail({ error: err });
@@ -831,10 +762,14 @@ export async function createRouter(
 
       try {
         const credentials = await httpAuth.credentials(req);
-        await checkPermission({
+        const task = await taskBroker.get(taskId);
+
+        await checkTaskPermission({
           credentials,
           permissions: [taskReadPermission],
           permissionService: permissions,
+          task: task,
+          isTaskAuthorized,
         });
 
         const after =
@@ -903,10 +838,14 @@ export async function createRouter(
 
       try {
         const credentials = await httpAuth.credentials(req);
-        await checkPermission({
+        const task = await taskBroker.get(taskId);
+
+        await checkTaskPermission({
           credentials,
           permissions: [taskReadPermission],
           permissionService: permissions,
+          task: task,
+          isTaskAuthorized,
         });
 
         const after = Number(req.query.after) || undefined;
@@ -977,17 +916,12 @@ export async function createRouter(
           throw new InputError('Input template is not a template');
         }
 
-        const { token } = await auth.getPluginRequestToken({
-          onBehalfOf: credentials,
-          targetPluginId: 'catalog',
-        });
-
         const userEntityRef = auth.isPrincipal(credentials, 'user')
           ? credentials.principal.userEntityRef
           : undefined;
 
         const userEntity = userEntityRef
-          ? await catalogClient.getEntityByRef(userEntityRef, { token })
+          ? await catalog.getEntityByRef(userEntityRef, { credentials })
           : undefined;
 
         const templateRef: string = `${template.kind}:${
@@ -1053,7 +987,7 @@ export async function createRouter(
           })),
           secrets: {
             ...body.secrets,
-            ...(token && { backstageToken: token }),
+            backstageToken: (credentials as any).token,
           },
           credentials,
         });
@@ -1096,6 +1030,18 @@ export async function createRouter(
       });
 
       res.status(200).json({ results });
+    })
+    .get('/v2/templating-extensions', async (_req, res) => {
+      res.status(200).json({
+        filters: {
+          ...extractFilterMetadata(createDefaultFilters({ integrations })),
+          ...extractFilterMetadata(additionalTemplateFilters),
+        },
+        globals: {
+          functions: extractGlobalFunctionMetadata(additionalTemplateGlobals),
+          values: extractGlobalValueMetadata(additionalTemplateGlobals),
+        },
+      });
     });
 
   const app = express();
@@ -1104,13 +1050,12 @@ export async function createRouter(
 
   async function authorizeTemplate(
     entityRef: CompoundEntityRef,
-    token: string | undefined,
     credentials: BackstageCredentials,
   ) {
     const template = await findTemplate({
-      catalogApi: catalogClient,
+      catalog,
       entityRef,
-      token,
+      credentials,
     });
 
     if (!isSupportedTemplate(template)) {
@@ -1137,18 +1082,18 @@ export async function createRouter(
     // Authorize parameters
     if (Array.isArray(template.spec.parameters)) {
       template.spec.parameters = template.spec.parameters.filter(step =>
-        isAuthorized(parameterDecision, step),
+        isTemplateAuthorized(parameterDecision, step),
       );
     } else if (
       template.spec.parameters &&
-      !isAuthorized(parameterDecision, template.spec.parameters)
+      !isTemplateAuthorized(parameterDecision, template.spec.parameters)
     ) {
       template.spec.parameters = undefined;
     }
 
     // Authorize steps
     template.spec.steps = template.spec.steps.filter(step =>
-      isAuthorized(stepDecision, step),
+      isTemplateAuthorized(stepDecision, step),
     );
 
     return template;

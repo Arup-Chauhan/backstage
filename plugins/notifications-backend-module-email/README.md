@@ -2,7 +2,7 @@
 
 Adds support for sending Backstage notifications as emails to users.
 
-Supports sending emails using `SMTP`, `SES`, `sendmail`, or `stream` (for debugging purposes).
+Supports sending emails using `SMTP`, `SES`, `azure`, `sendmail`, or `stream` (for debugging purposes).
 
 ## Customizing email content
 
@@ -61,6 +61,12 @@ notifications:
       #   accessKeyId: 'my-access-key
       #   region: 'us-west-2'
 
+      # Azure Communication Service
+      # transportConfig:
+      #   transport: 'azure'
+      #   endpoint: 'https://my-endpoint.communication.azure.com'
+      #   accessKey: 'my-access-key'      Optional: if not provided, Managed Identity will be used
+
       # sendmail
       # transportConfig:
       #   transport: 'sendmail'
@@ -73,6 +79,11 @@ notifications:
       # Who to send email for broadcast notifications
       broadcastConfig:
         receiver: 'users'
+      # Optional SES config
+      # sesConfig:
+      #   sourceArn: 'arn:aws:ses:us-west-2:123456789012:identity/example.com'
+      #   fromArn: 'arn:aws:ses:us-west-2:123456789012:identity/example.com'
+      #   configurationSetName: 'custom-config'
       # How many emails to send concurrently, defaults to 2
       concurrencyLimit: 10
       # How much to throttle between emails, defaults to 100ms

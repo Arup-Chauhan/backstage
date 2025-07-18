@@ -46,6 +46,7 @@ import { version as integrationReact } from '../../../integration-react/package.
 import { version as testUtils } from '../../../test-utils/package.json';
 import { version as theme } from '../../../theme/package.json';
 import { version as repoTools } from '../../../repo-tools/package.json';
+import { version as ui } from '../../../ui/package.json';
 
 import { version as pluginApiDocs } from '../../../../plugins/api-docs/package.json';
 import { version as pluginAppBackend } from '../../../../plugins/app-backend/package.json';
@@ -150,4 +151,5 @@ export const packageVersions = {
   '@backstage/plugin-user-settings': pluginUserSettings,
   '@backstage/test-utils': testUtils,
   '@backstage/theme': theme,
+  '@backstage/ui': ui,
 };

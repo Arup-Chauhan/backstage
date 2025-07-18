@@ -14,27 +14,21 @@
  * limitations under the License.
  */
 
-import { TokenManager } from '@backstage/backend-common';
-import {
-  AuthService,
-  DiscoveryService,
-  HttpAuthService,
-  LoggerService,
-} from '@backstage/backend-plugin-api';
-import { CatalogApi, CatalogClient } from '@backstage/catalog-client';
+import { AuthService, LoggerService } from '@backstage/backend-plugin-api';
 import { Config } from '@backstage/config';
 import { assertError, NotFoundError } from '@backstage/errors';
 import {
   AuthOwnershipResolver,
   AuthProviderFactory,
 } from '@backstage/plugin-auth-node';
+import { CatalogService } from '@backstage/plugin-catalog-node';
 import express from 'express';
 import Router from 'express-promise-router';
 import { Minimatch } from 'minimatch';
 import { CatalogAuthResolverContext } from '../lib/resolvers/CatalogAuthResolverContext';
 import { TokenIssuer } from '../identity/types';
+import { UserInfoDatabase } from '../database/UserInfoDatabase';
 
-/** @public */
 export type ProviderFactories = { [s: string]: AuthProviderFactory };
 
 export function bindProviderRouters(
@@ -45,13 +39,11 @@ export function bindProviderRouters(
     baseUrl: string;
     config: Config;
     logger: LoggerService;
-    discovery: DiscoveryService;
     auth: AuthService;
-    httpAuth: HttpAuthService;
-    tokenManager?: TokenManager;
     tokenIssuer: TokenIssuer;
+    userInfo: UserInfoDatabase;
     ownershipResolver?: AuthOwnershipResolver;
-    catalogApi?: CatalogApi;
+    catalog: CatalogService;
   },
 ) {
   const {
@@ -60,13 +52,11 @@ export function bindProviderRouters(
     baseUrl,
     config,
     logger,
-    discovery,
     auth,
-    httpAuth,
-    tokenManager,
     tokenIssuer,
-    catalogApi,
+    catalog,
     ownershipResolver,
+    userInfo,
   } = options;
 
   const providersConfig = config.getOptionalConfig('auth.providers');
@@ -91,14 +81,11 @@ export function bindProviderRouters(
           logger,
           resolverContext: CatalogAuthResolverContext.create({
             logger,
-            catalogApi:
-              catalogApi ?? new CatalogClient({ discoveryApi: discovery }),
+            catalog,
             tokenIssuer,
-            tokenManager,
-            discovery,
             auth,
-            httpAuth,
             ownershipResolver,
+            userInfo,
           }),
         });
 
@@ -145,7 +132,6 @@ export function bindProviderRouters(
   }
 }
 
-/** @public */
 export function createOriginFilter(
   config: Config,
 ): (origin: string) => boolean {
