@@ -27,6 +27,7 @@ import { bitbucketServerAuthApiRef } from '@backstage/core-plugin-api';
 import { ComponentType } from 'react';
 import { ConfigApi } from '@backstage/core-plugin-api';
 import { configApiRef } from '@backstage/core-plugin-api';
+import { ConfigurableExtensionDataRef as ConfigurableExtensionDataRef_2 } from '@backstage/frontend-plugin-api';
 import { createApiFactory } from '@backstage/core-plugin-api';
 import { createApiRef } from '@backstage/core-plugin-api';
 import { createTranslationMessages } from '@backstage/core-plugin-api/alpha';
@@ -39,6 +40,8 @@ import { ErrorApiError } from '@backstage/core-plugin-api';
 import { ErrorApiErrorContext } from '@backstage/core-plugin-api';
 import { errorApiRef } from '@backstage/core-plugin-api';
 import { Expand } from '@backstage/types';
+import { ExtensionBlueprint as ExtensionBlueprint_2 } from '@backstage/frontend-plugin-api';
+import { ExtensionDataRef as ExtensionDataRef_2 } from '@backstage/frontend-plugin-api';
 import { FeatureFlag } from '@backstage/core-plugin-api';
 import { FeatureFlagsApi } from '@backstage/core-plugin-api';
 import { featureFlagsApiRef } from '@backstage/core-plugin-api';
@@ -49,7 +52,8 @@ import { fetchApiRef } from '@backstage/core-plugin-api';
 import { githubAuthApiRef } from '@backstage/core-plugin-api';
 import { gitlabAuthApiRef } from '@backstage/core-plugin-api';
 import { googleAuthApiRef } from '@backstage/core-plugin-api';
-import { IconComponent as IconComponent_2 } from '@backstage/core-plugin-api';
+import { IconComponent as IconComponent_2 } from '@backstage/frontend-plugin-api';
+import { IconComponent as IconComponent_3 } from '@backstage/core-plugin-api';
 import { IdentityApi } from '@backstage/core-plugin-api';
 import { identityApiRef } from '@backstage/core-plugin-api';
 import { JsonObject } from '@backstage/types';
@@ -68,8 +72,8 @@ import { OpenIdConnectApi } from '@backstage/core-plugin-api';
 import { PendingOAuthRequest } from '@backstage/core-plugin-api';
 import { ProfileInfo } from '@backstage/core-plugin-api';
 import { ProfileInfoApi } from '@backstage/core-plugin-api';
-import { PropsWithChildren } from 'react';
 import { ReactNode } from 'react';
+import { RouteRef as RouteRef_2 } from '@backstage/frontend-plugin-api';
 import { SessionApi } from '@backstage/core-plugin-api';
 import { SessionState } from '@backstage/core-plugin-api';
 import { SignInPageProps } from '@backstage/core-plugin-api';
@@ -111,9 +115,12 @@ export const AnalyticsContext: (options: {
 }) => JSX_2.Element;
 
 // @public
-export type AnalyticsContextValue = CommonAnalyticsContext & {
-  [param in string]: string | boolean | number | undefined;
-};
+export interface AnalyticsContextValue {
+  // (undocumented)
+  [key: string]: string | boolean | number | undefined;
+  extensionId: string;
+  pluginId: string;
+}
 
 // @public
 export type AnalyticsEvent = {
@@ -127,6 +134,44 @@ export type AnalyticsEvent = {
 // @public
 export type AnalyticsEventAttributes = {
   [attribute in string]: string | boolean | number;
+};
+
+// @public
+export type AnalyticsImplementation = {
+  captureEvent(event: AnalyticsEvent): void;
+};
+
+// @public
+export const AnalyticsImplementationBlueprint: ExtensionBlueprint<{
+  kind: 'analytics';
+  params: <TDeps extends { [name in string]: unknown }>(
+    params: AnalyticsImplementationFactory<TDeps>,
+  ) => ExtensionBlueprintParams<AnalyticsImplementationFactory<{}>>;
+  output: ExtensionDataRef<
+    AnalyticsImplementationFactory<{}>,
+    'core.analytics.factory',
+    {}
+  >;
+  inputs: {};
+  config: {};
+  configInput: {};
+  dataRefs: {
+    factory: ConfigurableExtensionDataRef<
+      AnalyticsImplementationFactory<{}>,
+      'core.analytics.factory',
+      {}
+    >;
+  };
+}>;
+
+// @public (undocumented)
+export type AnalyticsImplementationFactory<
+  Deps extends {
+    [name in string]: unknown;
+  } = {},
+> = {
+  deps: TypesToApiRefs<Deps>;
+  factory(deps: Deps): AnalyticsImplementation;
 };
 
 // @public
@@ -145,19 +190,8 @@ export { AnyApiFactory };
 
 export { AnyApiRef };
 
-// @public (undocumented)
-export type AnyExtensionDataRef = ExtensionDataRef<
-  unknown,
-  string,
-  {
-    optional?: true;
-  }
->;
-
-// @public (undocumented)
-export type AnyExternalRoutes = {
-  [name in string]: ExternalRouteRef;
-};
+// @public @deprecated (undocumented)
+export type AnyExtensionDataRef = ExtensionDataRef;
 
 // @public
 export type AnyRouteRefParams =
@@ -166,19 +200,17 @@ export type AnyRouteRefParams =
     }
   | undefined;
 
-// @public (undocumented)
-export type AnyRoutes = {
-  [name in string]: RouteRef | SubRouteRef;
-};
-
 // @public
 export const ApiBlueprint: ExtensionBlueprint<{
   kind: 'api';
-  name: undefined;
-  params: {
-    factory: AnyApiFactory;
-  };
-  output: ConfigurableExtensionDataRef<AnyApiFactory, 'core.api.factory', {}>;
+  params: <
+    TApi,
+    TImpl extends TApi,
+    TDeps extends { [name in string]: unknown },
+  >(
+    params: ApiFactory<TApi, TImpl, TDeps>,
+  ) => ExtensionBlueprintParams<AnyApiFactory>;
+  output: ExtensionDataRef<AnyApiFactory, 'core.api.factory', {}>;
   inputs: {};
   config: {};
   configInput: {};
@@ -237,18 +269,15 @@ export interface AppNodeSpec {
   readonly id: string;
   // (undocumented)
   readonly plugin?: FrontendPlugin;
-  // @deprecated (undocumented)
-  readonly source?: FrontendPlugin;
 }
 
 // @public
 export const AppRootElementBlueprint: ExtensionBlueprint<{
   kind: 'app-root-element';
-  name: undefined;
   params: {
-    element: JSX.Element | (() => JSX.Element);
+    element: JSX.Element;
   };
-  output: ConfigurableExtensionDataRef<JSX_3.Element, 'core.reactElement', {}>;
+  output: ExtensionDataRef<JSX_3.Element, 'core.reactElement', {}>;
   inputs: {};
   config: {};
   configInput: {};
@@ -258,14 +287,12 @@ export const AppRootElementBlueprint: ExtensionBlueprint<{
 // @public
 export const AppRootWrapperBlueprint: ExtensionBlueprint<{
   kind: 'app-root-wrapper';
-  name: undefined;
   params: {
-    Component: ComponentType<PropsWithChildren<{}>>;
+    Component?: [error: 'Use the `component` parameter instead'];
+    component: (props: { children: ReactNode }) => JSX.Element | null;
   };
-  output: ConfigurableExtensionDataRef<
-    ComponentType<{
-      children?: ReactNode | undefined;
-    }>,
+  output: ExtensionDataRef<
+    (props: { children: ReactNode }) => JSX.Element | null,
     'app.root.wrapper',
     {}
   >;
@@ -274,9 +301,7 @@ export const AppRootWrapperBlueprint: ExtensionBlueprint<{
   configInput: {};
   dataRefs: {
     component: ConfigurableExtensionDataRef<
-      ComponentType<{
-        children?: ReactNode | undefined;
-      }>,
+      (props: { children: ReactNode }) => JSX.Element | null,
       'app.root.wrapper',
       {}
     >;
@@ -298,7 +323,7 @@ export interface AppTree {
 
 // @public
 export interface AppTreeApi {
-  getNodesByRoutePath(sourcePath: string): {
+  getNodesByRoutePath(routePath: string): {
     nodes: AppNode[];
   };
   getTree(): {
@@ -324,12 +349,6 @@ export { BackstageUserIdentity };
 export { bitbucketAuthApiRef };
 
 export { bitbucketServerAuthApiRef };
-
-// @public
-export type CommonAnalyticsContext = {
-  pluginId: string;
-  extensionId: string;
-};
 
 // @public (undocumented)
 export type ComponentRef<T extends {} = {}> = {
@@ -426,7 +445,7 @@ export function createComponentExtension<TProps extends {}>(options: {
 }): ExtensionDefinition<{
   config: {};
   configInput: {};
-  output: ConfigurableExtensionDataRef<
+  output: ExtensionDataRef<
     {
       ref: ComponentRef;
       impl: ComponentType;
@@ -436,7 +455,7 @@ export function createComponentExtension<TProps extends {}>(options: {
   >;
   inputs: {
     [x: string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -468,10 +487,10 @@ export function createComponentRef<T extends {} = {}>(options: {
 
 // @public (undocumented)
 export function createExtension<
-  UOutput extends AnyExtensionDataRef,
+  UOutput extends ExtensionDataRef,
   TInputs extends {
     [inputName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -506,7 +525,13 @@ export function createExtension<
           [key in keyof TConfigSchema]: ReturnType<TConfigSchema[key]>;
         }>
       >;
-  output: UOutput;
+  output: UOutput extends ExtensionDataRef<
+    infer IData,
+    infer IId,
+    infer IConfig
+  >
+    ? ExtensionDataRef<IData, IId, IConfig>
+    : never;
   inputs: TInputs;
   params: never;
   kind: string | undefined extends TKind ? undefined : TKind;
@@ -515,11 +540,11 @@ export function createExtension<
 
 // @public
 export function createExtensionBlueprint<
-  TParams extends object,
-  UOutput extends AnyExtensionDataRef,
+  TParams extends object | ExtensionBlueprintDefineParams,
+  UOutput extends ExtensionDataRef,
   TInputs extends {
     [inputName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -531,14 +556,12 @@ export function createExtensionBlueprint<
   },
   UFactoryOutput extends ExtensionDataValue<any, any>,
   TKind extends string,
-  TName extends string | undefined = undefined,
   TDataRefs extends {
-    [name in string]: AnyExtensionDataRef;
+    [name in string]: ExtensionDataRef;
   } = never,
 >(
   options: CreateExtensionBlueprintOptions<
     TKind,
-    TName,
     TParams,
     UOutput,
     TInputs,
@@ -548,9 +571,14 @@ export function createExtensionBlueprint<
   >,
 ): ExtensionBlueprint<{
   kind: TKind;
-  name: TName;
   params: TParams;
-  output: UOutput;
+  output: UOutput extends ExtensionDataRef<
+    infer IData,
+    infer IId,
+    infer IConfig
+  >
+    ? ExtensionDataRef<IData, IId, IConfig>
+    : never;
   inputs: string extends keyof TInputs ? {} : TInputs;
   config: string extends keyof TConfigSchema
     ? {}
@@ -570,12 +598,11 @@ export function createExtensionBlueprint<
 // @public (undocumented)
 export type CreateExtensionBlueprintOptions<
   TKind extends string,
-  TName extends string | undefined,
-  TParams,
-  UOutput extends AnyExtensionDataRef,
+  TParams extends object | ExtensionBlueprintDefineParams,
+  UOutput extends ExtensionDataRef,
   TInputs extends {
     [inputName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -587,7 +614,7 @@ export type CreateExtensionBlueprintOptions<
   },
   UFactoryOutput extends ExtensionDataValue<any, any>,
   TDataRefs extends {
-    [name in string]: AnyExtensionDataRef;
+    [name in string]: ExtensionDataRef;
   },
 > = {
   kind: TKind;
@@ -595,12 +622,16 @@ export type CreateExtensionBlueprintOptions<
   disabled?: boolean;
   inputs?: TInputs;
   output: Array<UOutput>;
-  name?: TName;
   config?: {
     schema: TConfigSchema;
   };
+  defineParams?: TParams extends ExtensionBlueprintDefineParams
+    ? TParams
+    : 'The defineParams option must be a function if provided, see the docs for details';
   factory(
-    params: TParams,
+    params: TParams extends ExtensionBlueprintDefineParams
+      ? ReturnType<TParams>['T']
+      : TParams,
     context: {
       node: AppNode;
       apis: ApiHolder;
@@ -612,6 +643,11 @@ export type CreateExtensionBlueprintOptions<
   ): Iterable<UFactoryOutput>;
   dataRefs?: TDataRefs;
 } & VerifyExtensionFactoryOutput<UOutput, UFactoryOutput>;
+
+// @public
+export function createExtensionBlueprintParams<T extends object = object>(
+  params: T,
+): ExtensionBlueprintParams<T>;
 
 // @public (undocumented)
 export function createExtensionDataRef<TData>(): {
@@ -653,10 +689,10 @@ export function createExtensionInput<
 export type CreateExtensionOptions<
   TKind extends string | undefined,
   TName extends string | undefined,
-  UOutput extends AnyExtensionDataRef,
+  UOutput extends ExtensionDataRef,
   TInputs extends {
     [inputName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -766,30 +802,15 @@ export interface CreateFrontendModuleOptions<
 // @public (undocumented)
 export function createFrontendPlugin<
   TId extends string,
-  TRoutes extends AnyRoutes = {},
-  TExternalRoutes extends AnyExternalRoutes = {},
+  TRoutes extends {
+    [name in string]: RouteRef | SubRouteRef;
+  } = {},
+  TExternalRoutes extends {
+    [name in string]: ExternalRouteRef;
+  } = {},
   TExtensions extends readonly ExtensionDefinition[] = [],
 >(
   options: PluginOptions<TId, TRoutes, TExternalRoutes, TExtensions>,
-): FrontendPlugin<
-  TRoutes,
-  TExternalRoutes,
-  MakeSortedExtensionsMap<TExtensions[number], TId>
->;
-
-// @public @deprecated (undocumented)
-export function createFrontendPlugin<
-  TId extends string,
-  TRoutes extends AnyRoutes = {},
-  TExternalRoutes extends AnyExternalRoutes = {},
-  TExtensions extends readonly ExtensionDefinition[] = [],
->(
-  options: Omit<
-    PluginOptions<TId, TRoutes, TExternalRoutes, TExtensions>,
-    'pluginId'
-  > & {
-    id: string;
-  },
 ): FrontendPlugin<
   TRoutes,
   TExternalRoutes,
@@ -805,7 +826,10 @@ export function createRouteRef<
     | undefined = undefined,
   TParamKeys extends string = string,
 >(config?: {
-  readonly params: string extends TParamKeys ? (keyof TParams)[] : TParamKeys[];
+  readonly params?: string extends TParamKeys
+    ? (keyof TParams)[]
+    : TParamKeys[];
+  aliasFor?: string;
 }): RouteRef<
   keyof TParams extends never
     ? undefined
@@ -833,14 +857,14 @@ export { createTranslationResource };
 
 // @public
 export interface DialogApi {
-  show<TResult = {}>(
+  show<TResult = void>(
     elementOrComponent:
       | JSX.Element
       | ((props: {
           dialog: DialogApiDialog<TResult | undefined>;
         }) => JSX.Element),
   ): DialogApiDialog<TResult | undefined>;
-  showModal<TResult = {}>(
+  showModal<TResult = void>(
     elementOrComponent:
       | JSX.Element
       | ((props: { dialog: DialogApiDialog<TResult> }) => JSX.Element),
@@ -848,7 +872,7 @@ export interface DialogApi {
 }
 
 // @public
-export interface DialogApiDialog<TResult = unknown> {
+export interface DialogApiDialog<TResult = void> {
   close(
     ...args: undefined extends TResult ? [result?: TResult] : [result: TResult]
   ): void;
@@ -907,14 +931,21 @@ export interface ExtensionBlueprint<
   // (undocumented)
   dataRefs: T['dataRefs'];
   // (undocumented)
-  make<TNewName extends string | undefined>(args: {
-    name?: TNewName;
+  make<
+    TName extends string | undefined,
+    TParamsInput extends AnyParamsInput_2<NonNullable<T['params']>>,
+  >(args: {
+    name?: TName;
     attachTo?: ExtensionAttachToSpec;
     disabled?: boolean;
-    params: T['params'];
+    params: TParamsInput extends ExtensionBlueprintDefineParams
+      ? TParamsInput
+      : T['params'] extends ExtensionBlueprintDefineParams
+      ? 'Error: This blueprint uses advanced parameter types and requires you to pass parameters as using the following callback syntax: `<blueprint>.make({ params: defineParams => defineParams(<params>) })`'
+      : T['params'];
   }): ExtensionDefinition<{
     kind: T['kind'];
-    name: string | undefined extends TNewName ? T['name'] : TNewName;
+    name: string | undefined extends TName ? undefined : TName;
     config: T['config'];
     configInput: T['configInput'];
     output: T['output'];
@@ -922,15 +953,15 @@ export interface ExtensionBlueprint<
     params: T['params'];
   }>;
   makeWithOverrides<
-    TNewName extends string | undefined,
+    TName extends string | undefined,
     TExtensionConfigSchema extends {
       [key in string]: (zImpl: typeof z) => z.ZodType;
     },
     UFactoryOutput extends ExtensionDataValue<any, any>,
-    UNewOutput extends AnyExtensionDataRef,
+    UNewOutput extends ExtensionDataRef,
     TExtraInputs extends {
       [inputName in string]: ExtensionInput<
-        AnyExtensionDataRef,
+        ExtensionDataRef,
         {
           optional: boolean;
           singleton: boolean;
@@ -938,7 +969,7 @@ export interface ExtensionBlueprint<
       >;
     },
   >(args: {
-    name?: TNewName;
+    name?: TName;
     attachTo?: ExtensionAttachToSpec;
     disabled?: boolean;
     inputs?: TExtraInputs & {
@@ -953,8 +984,14 @@ export interface ExtensionBlueprint<
       };
     };
     factory(
-      originalFactory: (
-        params: T['params'],
+      originalFactory: <
+        TParamsInput extends AnyParamsInput_2<NonNullable<T['params']>>,
+      >(
+        params: TParamsInput extends ExtensionBlueprintDefineParams
+          ? TParamsInput
+          : T['params'] extends ExtensionBlueprintDefineParams
+          ? 'Error: This blueprint uses advanced parameter types and requires you to pass parameters as using the following callback syntax: `originalFactory(defineParams => defineParams(<params>))`'
+          : T['params'],
         context?: {
           config?: T['config'];
           inputs?: ResolveInputValueOverrides<NonNullable<T['inputs']>>;
@@ -972,7 +1009,7 @@ export interface ExtensionBlueprint<
       },
     ): Iterable<UFactoryOutput> &
       VerifyExtensionFactoryOutput<
-        AnyExtensionDataRef extends UNewOutput
+        ExtensionDataRef extends UNewOutput
           ? NonNullable<T['output']>
           : UNewOutput,
         UFactoryOutput
@@ -996,29 +1033,34 @@ export interface ExtensionBlueprint<
           }>
         >) &
       T['configInput'];
-    output: AnyExtensionDataRef extends UNewOutput ? T['output'] : UNewOutput;
+    output: ExtensionDataRef extends UNewOutput ? T['output'] : UNewOutput;
     inputs: T['inputs'] & TExtraInputs;
     kind: T['kind'];
-    name: string | undefined extends TNewName ? T['name'] : TNewName;
+    name: string | undefined extends TName ? undefined : TName;
     params: T['params'];
   }>;
 }
 
+// @public
+export type ExtensionBlueprintDefineParams<
+  TParams extends object = object,
+  TInput = any,
+> = (params: TInput) => ExtensionBlueprintParams<TParams>;
+
 // @public (undocumented)
 export type ExtensionBlueprintParameters = {
   kind: string;
-  name?: string;
-  params?: object;
+  params?: object | ExtensionBlueprintDefineParams;
   configInput?: {
     [K in string]: any;
   };
   config?: {
     [K in string]: any;
   };
-  output?: AnyExtensionDataRef;
+  output?: ExtensionDataRef;
   inputs?: {
     [KName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -1026,8 +1068,14 @@ export type ExtensionBlueprintParameters = {
     >;
   };
   dataRefs?: {
-    [name in string]: AnyExtensionDataRef;
+    [name in string]: ExtensionDataRef;
   };
+};
+
+// @public
+export type ExtensionBlueprintParams<T extends object = object> = {
+  $$type: '@backstage/BlueprintParams';
+  T: T;
 };
 
 // @public (undocumented)
@@ -1053,11 +1101,10 @@ export interface ExtensionBoundaryProps {
   children: ReactNode;
   // (undocumented)
   node: AppNode;
-  routable?: boolean;
 }
 
 // @public (undocumented)
-export type ExtensionDataContainer<UExtensionData extends AnyExtensionDataRef> =
+export type ExtensionDataContainer<UExtensionData extends ExtensionDataRef> =
   Iterable<
     UExtensionData extends ExtensionDataRef<
       infer IData,
@@ -1080,11 +1127,13 @@ export type ExtensionDataContainer<UExtensionData extends AnyExtensionDataRef> =
 
 // @public (undocumented)
 export type ExtensionDataRef<
-  TData,
+  TData = unknown,
   TId extends string = string,
   TConfig extends {
     optional?: true;
-  } = {},
+  } = {
+    optional?: true;
+  },
 > = {
   readonly $$type: '@backstage/ExtensionDataRef';
   readonly id: TId;
@@ -1116,16 +1165,17 @@ export type ExtensionDefinition<
       [key in string]: (zImpl: typeof z) => z.ZodType;
     },
     UFactoryOutput extends ExtensionDataValue<any, any>,
-    UNewOutput extends AnyExtensionDataRef,
+    UNewOutput extends ExtensionDataRef,
     TExtraInputs extends {
       [inputName in string]: ExtensionInput<
-        AnyExtensionDataRef,
+        ExtensionDataRef,
         {
           optional: boolean;
           singleton: boolean;
         }
       >;
     },
+    TParamsInput extends AnyParamsInput<NonNullable<T['params']>>,
   >(
     args: Expand<
       {
@@ -1143,7 +1193,11 @@ export type ExtensionDefinition<
           };
         };
         factory?(
-          originalFactory: (
+          originalFactory: <
+            TFactoryParamsReturn extends AnyParamsInput<
+              NonNullable<T['params']>
+            >,
+          >(
             context?: Expand<
               {
                 config?: T['config'];
@@ -1151,7 +1205,11 @@ export type ExtensionDefinition<
               } & ([T['params']] extends [never]
                 ? {}
                 : {
-                    params?: Partial<T['params']>;
+                    params?: TFactoryParamsReturn extends ExtensionBlueprintDefineParams
+                      ? TFactoryParamsReturn
+                      : T['params'] extends ExtensionBlueprintDefineParams
+                      ? 'Error: This blueprint uses advanced parameter types and requires you to pass parameters as using the following callback syntax: `originalFactory(defineParams => defineParams(<params>))`'
+                      : Partial<T['params']>;
                   })
             >,
           ) => ExtensionDataContainer<NonNullable<T['output']>>,
@@ -1169,11 +1227,15 @@ export type ExtensionDefinition<
       } & ([T['params']] extends [never]
         ? {}
         : {
-            params?: Partial<T['params']>;
+            params?: TParamsInput extends ExtensionBlueprintDefineParams
+              ? TParamsInput
+              : T['params'] extends ExtensionBlueprintDefineParams
+              ? 'Error: This blueprint uses advanced parameter types and requires you to pass parameters as using the following callback syntax: `originalFactory(defineParams => defineParams(<params>))`'
+              : Partial<T['params']>;
           })
     > &
       VerifyExtensionFactoryOutput<
-        AnyExtensionDataRef extends UNewOutput
+        ExtensionDataRef extends UNewOutput
           ? NonNullable<T['output']>
           : UNewOutput,
         UFactoryOutput
@@ -1181,7 +1243,7 @@ export type ExtensionDefinition<
   ): ExtensionDefinition<{
     kind: T['kind'];
     name: T['name'];
-    output: AnyExtensionDataRef extends UNewOutput ? T['output'] : UNewOutput;
+    output: ExtensionDataRef extends UNewOutput ? T['output'] : UNewOutput;
     inputs: T['inputs'] & TExtraInputs;
     config: T['config'] & {
       [key in keyof TExtensionConfigSchema]: z.infer<
@@ -1209,24 +1271,24 @@ export type ExtensionDefinitionParameters = {
   config?: {
     [K in string]: any;
   };
-  output?: AnyExtensionDataRef;
+  output?: ExtensionDataRef;
   inputs?: {
     [KName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
       }
     >;
   };
-  params?: object;
+  params?: object | ExtensionBlueprintDefineParams;
 };
 
 // @public (undocumented)
 export type ExtensionFactoryMiddleware = (
   originalFactory: (contextOverrides?: {
     config?: JsonObject;
-  }) => ExtensionDataContainer<AnyExtensionDataRef>,
+  }) => ExtensionDataContainer<ExtensionDataRef>,
   context: {
     node: AppNode;
     apis: ApiHolder;
@@ -1309,8 +1371,16 @@ export interface FrontendModule {
 
 // @public (undocumented)
 export interface FrontendPlugin<
-  TRoutes extends AnyRoutes = AnyRoutes,
-  TExternalRoutes extends AnyExternalRoutes = AnyExternalRoutes,
+  TRoutes extends {
+    [name in string]: RouteRef | SubRouteRef;
+  } = {
+    [name in string]: RouteRef | SubRouteRef;
+  },
+  TExternalRoutes extends {
+    [name in string]: ExternalRouteRef;
+  } = {
+    [name in string]: ExternalRouteRef;
+  },
   TExtensionMap extends {
     [id in string]: ExtensionDefinition;
   } = {
@@ -1366,11 +1436,10 @@ export { googleAuthApiRef };
 // @public (undocumented)
 export const IconBundleBlueprint: ExtensionBlueprint<{
   kind: 'icon-bundle';
-  name: undefined;
   params: {
     icons: { [key in string]: IconComponent };
   };
-  output: ConfigurableExtensionDataRef<
+  output: ExtensionDataRef<
     {
       [x: string]: IconComponent;
     },
@@ -1414,18 +1483,56 @@ export { identityApiRef };
 export { microsoftAuthApiRef };
 
 // @public
+export const NavContentBlueprint: ExtensionBlueprint_2<{
+  kind: 'nav-content';
+  params: {
+    component: NavContentComponent;
+  };
+  output: ExtensionDataRef_2<
+    NavContentComponent,
+    'core.nav-content.component',
+    {}
+  >;
+  inputs: {};
+  config: {};
+  configInput: {};
+  dataRefs: {
+    component: ConfigurableExtensionDataRef_2<
+      NavContentComponent,
+      'core.nav-content.component',
+      {}
+    >;
+  };
+}>;
+
+// @public
+export type NavContentComponent = (
+  props: NavContentComponentProps,
+) => JSX.Element | null;
+
+// @public
+export interface NavContentComponentProps {
+  items: Array<{
+    icon: IconComponent_2;
+    title: string;
+    routeRef: RouteRef_2<undefined>;
+    to: string;
+    text: string;
+  }>;
+}
+
+// @public
 export const NavItemBlueprint: ExtensionBlueprint<{
   kind: 'nav-item';
-  name: undefined;
   params: {
     title: string;
-    icon: IconComponent_2;
+    icon: IconComponent_3;
     routeRef: RouteRef<undefined>;
   };
-  output: ConfigurableExtensionDataRef<
+  output: ExtensionDataRef<
     {
       title: string;
-      icon: IconComponent_2;
+      icon: IconComponent_3;
       routeRef: RouteRef<undefined>;
     },
     'core.nav-item.target',
@@ -1438,41 +1545,10 @@ export const NavItemBlueprint: ExtensionBlueprint<{
     target: ConfigurableExtensionDataRef<
       {
         title: string;
-        icon: IconComponent_2;
+        icon: IconComponent_3;
         routeRef: RouteRef<undefined>;
       },
       'core.nav-item.target',
-      {}
-    >;
-  };
-}>;
-
-// @public
-export const NavLogoBlueprint: ExtensionBlueprint<{
-  kind: 'nav-logo';
-  name: undefined;
-  params: {
-    logoIcon: JSX.Element;
-    logoFull: JSX.Element;
-  };
-  output: ConfigurableExtensionDataRef<
-    {
-      logoIcon?: JSX.Element;
-      logoFull?: JSX.Element;
-    },
-    'core.nav-logo.logo-elements',
-    {}
-  >;
-  inputs: {};
-  config: {};
-  configInput: {};
-  dataRefs: {
-    logoElements: ConfigurableExtensionDataRef<
-      {
-        logoIcon?: JSX.Element;
-        logoFull?: JSX.Element;
-      },
-      'core.nav-logo.logo-elements',
       {}
     >;
   };
@@ -1499,16 +1575,16 @@ export { OpenIdConnectApi };
 // @public
 export const PageBlueprint: ExtensionBlueprint<{
   kind: 'page';
-  name: undefined;
   params: {
-    defaultPath: string;
+    defaultPath?: [Error: `Use the 'path' param instead`];
+    path: string;
     loader: () => Promise<JSX.Element>;
     routeRef?: RouteRef;
   };
   output:
-    | ConfigurableExtensionDataRef<JSX_3.Element, 'core.reactElement', {}>
-    | ConfigurableExtensionDataRef<string, 'core.routing.path', {}>
-    | ConfigurableExtensionDataRef<
+    | ExtensionDataRef<string, 'core.routing.path', {}>
+    | ExtensionDataRef<JSX_3.Element, 'core.reactElement', {}>
+    | ExtensionDataRef<
         RouteRef<AnyRouteRefParams>,
         'core.routing.ref',
         {
@@ -1530,8 +1606,12 @@ export { PendingOAuthRequest };
 // @public (undocumented)
 export interface PluginOptions<
   TId extends string,
-  TRoutes extends AnyRoutes,
-  TExternalRoutes extends AnyExternalRoutes,
+  TRoutes extends {
+    [name in string]: RouteRef | SubRouteRef;
+  },
+  TExternalRoutes extends {
+    [name in string]: ExternalRouteRef;
+  },
   TExtensions extends readonly ExtensionDefinition[],
 > {
   // (undocumented)
@@ -1561,7 +1641,7 @@ export { ProfileInfoApi };
 // @public
 export type ResolvedExtensionInput<
   TExtensionInput extends ExtensionInput<any, any>,
-> = TExtensionInput['extensionData'] extends Array<AnyExtensionDataRef>
+> = TExtensionInput['extensionData'] extends Array<ExtensionDataRef>
   ? {
       node: AppNode;
     } & ExtensionDataContainer<TExtensionInput['extensionData'][number]>
@@ -1584,7 +1664,7 @@ export type ResolvedExtensionInputs<
 export type ResolveInputValueOverrides<
   TInputs extends {
     [inputName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -1592,7 +1672,7 @@ export type ResolveInputValueOverrides<
     >;
   } = {
     [inputName in string]: ExtensionInput<
-      AnyExtensionDataRef,
+      ExtensionDataRef,
       {
         optional: boolean;
         singleton: boolean;
@@ -1657,14 +1737,12 @@ export type RouteFunc<TParams extends AnyRouteRefParams> = (
 // @public (undocumented)
 export const RouterBlueprint: ExtensionBlueprint<{
   kind: 'app-router-component';
-  name: undefined;
   params: {
-    Component: ComponentType<PropsWithChildren<{}>>;
+    Component?: [error: 'Use the `component` parameter instead'];
+    component: (props: { children: ReactNode }) => JSX.Element | null;
   };
-  output: ConfigurableExtensionDataRef<
-    ComponentType<{
-      children?: ReactNode | undefined;
-    }>,
+  output: ExtensionDataRef<
+    (props: { children: ReactNode }) => JSX.Element | null,
     'app.router.wrapper',
     {}
   >;
@@ -1673,9 +1751,7 @@ export const RouterBlueprint: ExtensionBlueprint<{
   configInput: {};
   dataRefs: {
     component: ConfigurableExtensionDataRef<
-      ComponentType<{
-        children?: ReactNode | undefined;
-      }>,
+      (props: { children: ReactNode }) => JSX.Element | null,
       'app.router.wrapper',
       {}
     >;
@@ -1700,17 +1776,14 @@ export interface RouteResolutionApi {
       | RouteRef<TParams>
       | SubRouteRef<TParams>
       | ExternalRouteRef<TParams>,
-    options?: RouteResolutionApiResolveOptions,
+    options?: {
+      sourcePath?: string;
+    },
   ): RouteFunc<TParams> | undefined;
 }
 
 // @public
 export const routeResolutionApiRef: ApiRef<RouteResolutionApi>;
-
-// @public (undocumented)
-export type RouteResolutionApiResolveOptions = {
-  sourcePath?: string;
-};
 
 export { SessionApi };
 
@@ -1719,11 +1792,10 @@ export { SessionState };
 // @public
 export const SignInPageBlueprint: ExtensionBlueprint<{
   kind: 'sign-in-page';
-  name: undefined;
   params: {
     loader: () => Promise<ComponentType<SignInPageProps>>;
   };
-  output: ConfigurableExtensionDataRef<
+  output: ExtensionDataRef<
     ComponentType<SignInPageProps>,
     'core.sign-in-page.component',
     {}
@@ -1761,11 +1833,10 @@ export interface SubRouteRef<
 // @public
 export const ThemeBlueprint: ExtensionBlueprint<{
   kind: 'theme';
-  name: undefined;
   params: {
     theme: AppTheme;
   };
-  output: ConfigurableExtensionDataRef<AppTheme, 'core.theme.theme', {}>;
+  output: ExtensionDataRef<AppTheme, 'core.theme.theme', {}>;
   inputs: {};
   config: {};
   configInput: {};
@@ -1777,11 +1848,10 @@ export const ThemeBlueprint: ExtensionBlueprint<{
 // @public
 export const TranslationBlueprint: ExtensionBlueprint<{
   kind: 'translation';
-  name: undefined;
   params: {
     resource: TranslationResource | TranslationMessages;
   };
-  output: ConfigurableExtensionDataRef<
+  output: ExtensionDataRef<
     | TranslationResource<string>
     | TranslationMessages<
         string,
